@@ -232,7 +232,6 @@ class _ProcessingThread(QThread):
             print 'debug'
         except:
             pass
-        
         try:
             self._run()
         except:

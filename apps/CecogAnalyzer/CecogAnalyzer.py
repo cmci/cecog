@@ -447,7 +447,9 @@ class AnalyzerMainWindow(QMainWindow):
     def _write_settings(self, filename):
         try:
             f = file(filename, 'w')
-            self._settings.write(f)
+            # create a new version (copy) of the current settings which add the needed rendering information
+            settings_dummy = ProcessingFrame.get_export_settings(self._settings)
+            settings_dummy.write(f)
             f.close()
         except:
             critical(self,
@@ -779,10 +781,10 @@ if __name__ == "__main__":
         set_package_path(package_path)
         log_path = os.path.join(get_appdata_path(), 'log')
         safe_mkdirs(log_path)
-        sys.stdout = \
-            file(os.path.join(log_path, 'cecog_analyzer_stdout.log'), 'w')
-        sys.stderr = \
-            file(os.path.join(log_path, 'cecog_analyzer_stderr.log'), 'w')
+#        sys.stdout = \
+#            file(os.path.join(log_path, 'cecog_analyzer_stdout.log'), 'w')
+#        sys.stderr = \
+#            file(os.path.join(log_path, 'cecog_analyzer_stderr.log'), 'w')
 
     splash = QSplashScreen(QPixmap(':cecog_splash'))
     splash.show()

@@ -214,7 +214,7 @@ class TimeHolder(OrderedDict):
                 nr_frames = len(frames)
                 var = grp_def_pos.create_dataset(self.HDF5_GRP_TIME,
                                             (nr_frames,), dtype,
-                                            chunks=(1,),
+                                            chunks=(nr_frames,),
                                             compression=self._hdf5_compression)
                 for frame in frames:
                     idx = self._frames_to_idx[frame]
@@ -331,7 +331,7 @@ class TimeHolder(OrderedDict):
 
     def getCurrentChannels(self):
         return self[self._iCurrentT]
-
+    
     def purge_features(self):
         for channels in self.itervalues():
             for channel in channels.itervalues():
@@ -345,7 +345,7 @@ class TimeHolder(OrderedDict):
 
     def _convert_feature_name(self, feature_name, channel_name, region_name):
         return '__'.join([feature_name, channel_name, region_name])
-
+    
     def apply_channel(self, oChannel):
         iT = self._iCurrentT
         if not iT in self:
@@ -373,8 +373,8 @@ class TimeHolder(OrderedDict):
                 var_labels = \
                     grp.create_dataset(var_name,
                                        (nr_labels, t, z, h, w),
-                                       'int32',
-                                       chunks=(1, 1, 1, h, w),
+                                       'uint16',
+                                       chunks=(1, 5, 1, h/5, w/5),
                                        compression=self._hdf5_compression)
 
             frame_idx = self._frames_to_idx[self._iCurrentT]
@@ -383,12 +383,16 @@ class TimeHolder(OrderedDict):
                         self._convert_region_name(channel.PREFIX, region_name)]
                 container = channel.dctContainers[region_name]
                 array = container.img_labels.toArray(copy=False)
-                var_labels[idx, frame_idx, 0] = numpy.require(array, 'int32')
+                var_labels[idx, frame_idx, 0] = numpy.require(array, 'uint16')
 
 
     def prepare_raw_image(self, channel):
         desc = '[P %s, T %05d, C %s]' % (self.P, self._iCurrentT,
                                          channel.strChannelId)
+        
+
+
+        
         channel.apply_zselection()
         channel.normalize_image()
         channel.apply_registration()
@@ -409,8 +413,9 @@ class TimeHolder(OrderedDict):
                     grp.create_dataset(var_name,
                                        (nr_channels, t, z, h, w),
                                        'uint8',
-                                       chunks=(1, 1, 1, h, w),
-                                       compression=self._hdf5_compression)
+                                       chunks=(1, 1, 1, h/10, w/10),
+#                                       compression=self._hdf5_compression)
+                                       )
 
             frame_idx = self._frames_to_idx[self._iCurrentT]
             channel_idx = self._channels_to_idx[channel.PREFIX]
@@ -471,7 +476,8 @@ class TimeHolder(OrderedDict):
                                                      (nr_objects,),
                                                      self.HDF5_DTYPE_TERMINAL_RELATION,
                                                      compression=self._hdf5_compression,
-                                                     chunks=(1,))
+                                                     chunks=(nr_objects,),
+                                                     maxshape=(None,))
                     var_rel_offset = 0
                 else:
                     var_rel = grp_rel[var_name]
@@ -486,7 +492,8 @@ class TimeHolder(OrderedDict):
                                                                (nr_objects,),
                                                                self.HDF5_DTYPE_RELATION,
                                                                compression=self._hdf5_compression,
-                                                               chunks=(1,))
+                                                               chunks=(nr_objects,),
+                                                               maxshape=(None,))
                     else:
                         var_rel_cross = grp_rel[var_name]
                         var_rel_cross.resize((var_rel_offset + nr_objects,))
@@ -495,14 +502,23 @@ class TimeHolder(OrderedDict):
                 grp_cur_obj = grp_obj.require_group(grp_name)
                 var_name = self.HDF5_NAME_EDGE
                 if var_name not in grp_cur_obj:
-                    var_edge = grp_cur_obj.create_dataset(var_name, (nr_objects,), self.HDF5_DTYPE_EDGE, chunks=(1,))
+                    var_edge = grp_cur_obj.create_dataset(var_name, 
+                                                          (nr_objects,), 
+                                                          self.HDF5_DTYPE_EDGE, 
+                                                          chunks=(nr_objects,),
+                                                          maxshape=(None,)
+                                                          )
                 else:
                     var_edge = grp_cur_obj[var_name]
                     var_edge.resize((var_rel_offset + nr_objects,))
 
                 var_name = self.HDF5_NAME_ID
                 if var_name not in grp_cur_obj:
-                    var_id = grp_cur_obj.create_dataset(var_name, (nr_objects,), self.HDF5_DTYPE_ID, chunks=(1,))
+                    var_id = grp_cur_obj.create_dataset(var_name, 
+                                                        (nr_objects,), 
+                                                        self.HDF5_DTYPE_ID, 
+                                                        chunks=(nr_objects,),
+                                                        maxshape=(None,))
                 else:
                     var_id = grp_cur_obj[var_name]
                     var_id.resize((var_rel_offset + nr_objects,))
@@ -527,8 +543,9 @@ class TimeHolder(OrderedDict):
                             var_feature = \
                                 self._grp_def.create_dataset(self.HDF5_GRP_FEATURE,
                                                              (nr_features,), dt,
-                                                             chunks=(1,),
-                                                             compression=self._hdf5_compression)
+                                                             chunks=(nr_features,),
+                                                             compression=self._hdf5_compression,
+                                                             maxshape=(None,))
                             offset = 0
                         else:
                             var_feature = self._grp_def[self.HDF5_GRP_FEATURE]
@@ -570,8 +587,9 @@ class TimeHolder(OrderedDict):
                                 grp_cur_obj.create_dataset(var_name,
                                                 (nr_objects, nr_features),
                                                 'float',
-                                                chunks=(1, nr_features),
-                                                compression=self._hdf5_compression)
+                                                chunks=(nr_objects, nr_features),
+                                                compression=self._hdf5_compression,
+                                                maxshape=(None, nr_features))
                         else:
                             var_feature = grp_cur_obj[var_name]
                             var_feature.resize((var_rel_offset + nr_objects,
@@ -582,7 +600,7 @@ class TimeHolder(OrderedDict):
                     var_crack = \
                         grp_current_region.create_dataset('crack_contour',
                                             (nr_objects, ), dt,
-                                            chunks=(1, ),
+                                            chunks=(nr_objects, ),
                                             compression=self._hdf5_compression)
                 frame_idx = self._frames_to_idx[self._iCurrentT]
                 for idx, obj_id in enumerate(region):
@@ -627,7 +645,7 @@ class TimeHolder(OrderedDict):
             grp = self._grp_cur_position[self.HDF5_GRP_RELATION]
 
             head_nodes = [node_id for node_id in graph.node_list()
-                          if graph.in_degree(node_id) == 0]
+                          if graph.in_degree(node_id) == 0 and graph.out_degree(node_id) > 0]
             nr_edges = graph.number_of_edges()
             nr_objects = len(head_nodes)
 
@@ -638,13 +656,14 @@ class TimeHolder(OrderedDict):
             var_rel = grp.create_dataset('tracking',
                                          (nr_edges, ),
                                          self.HDF5_DTYPE_RELATION,
-                                         chunks=(1,),
+                                         chunks=(nr_edges,),
                                          compression=self._hdf5_compression)
             grp = self._grp_cur_position[self.HDF5_GRP_OBJECT]
             grp_cur_obj = grp.create_group('track')
             var_id = grp_cur_obj.create_dataset(self.HDF5_NAME_ID, (nr_objects,), self.HDF5_DTYPE_ID)
 
             prefix = PrimaryChannel.PREFIX
+            data = []
             for idx, edge in enumerate(graph.edges.itervalues()):
                 head_id, tail_id = edge[:2]
                 head_frame, head_obj_id = \
@@ -659,34 +678,23 @@ class TimeHolder(OrderedDict):
                 tail_obj_id_meta = self._object_coord_to_id[(prefix, (tail_frame_idx, tail_obj_id))]
                 tail_obj_idx_meta = self._object_coord_to_idx[(prefix, (tail_frame_idx, tail_obj_id))]
 
-                var_rel[idx] = (head_obj_id_meta, head_obj_idx_meta,
-                                tail_obj_id_meta, tail_obj_idx_meta)
+                data.append((head_obj_id_meta, head_obj_idx_meta,
+                            tail_obj_id_meta, tail_obj_idx_meta))
                 self._edge_to_idx[(head_id, tail_id)] = idx
                 
-
+            var_rel[:] = data
             # traverse the graph structure by head nodes and save one object per head node
             # (with all forward-reachable nodes)
             data = []
-            for obj_idx, node_id in enumerate(head_nodes):
+            for obj_idx, head_id in enumerate(head_nodes):
                 obj_id = obj_idx + 1
-#                if obj_id == 104:
-#                    try:
-#                        import pydevd
-#                        pydevd.connected = True
-#                        pydevd.settrace(suspend=False)
-#                        print 'debug'
-#                    except:
-#                        pass
-                
-                nl = [node_id]
                 edge_idx_start = len(data)
-                while len(nl) > 0:
-                    node_id2 = nl.pop()
-                    for edge in graph.out_arcs(node_id2):
-                        tail_id = graph.tail(edge)
-                        rel_idx = self._edge_to_idx[(node_id2, tail_id)]
-                        data.append((obj_id, rel_idx))
-                        nl.append(tail_id)
+                edge_list = graph.dfs_edges(head_id)
+                
+                for head, tail in edge_list:
+                    rel_idx = self._edge_to_idx[(head, tail)]
+                    data.append((obj_id, rel_idx))
+                
                 var_id[obj_idx] = (obj_id, edge_idx_start, len(data))
 
             var_edge = grp_cur_obj.create_dataset(self.HDF5_NAME_EDGE, (len(data),), 
@@ -712,12 +720,13 @@ class TimeHolder(OrderedDict):
                 else:
                     raise ValueError("More than two daughter cell are not supported.")
 
+            grp = self._grp_cur_position[self.HDF5_GRP_OBJECT]
+            grp_cur_obj = grp.create_group('event')
+            
             if nr_events > 0:
-                grp = self._grp_cur_position[self.HDF5_GRP_OBJECT]
-                grp_cur_obj = grp.create_group('event')
-                var_edge = grp_cur_obj.create_dataset(self.HDF5_NAME_EDGE, (nr_edges,), self.HDF5_DTYPE_EDGE)
-                var_id = grp_cur_obj.create_dataset(self.HDF5_NAME_ID, (nr_events,), self.HDF5_DTYPE_ID)
-
+                var_edge = grp_cur_obj.create_dataset(self.HDF5_NAME_EDGE, (nr_edges,), self.HDF5_DTYPE_EDGE, maxshape=(None,))
+                var_id = grp_cur_obj.create_dataset(self.HDF5_NAME_ID, (nr_events,), self.HDF5_DTYPE_ID, maxshape=(None,))
+                
                 obj_idx = 0
                 rel_idx = 0
                 for events in event_lookup.itervalues():
@@ -738,7 +747,14 @@ class TimeHolder(OrderedDict):
                         
                     var_id[obj_idx] = (obj_id, rel_idx_start, rel_idx)
                     obj_idx += 1
-                    
+            else:
+                var_edge = grp_cur_obj.create_dataset(self.HDF5_NAME_EDGE, (0,), 
+                                                      self.HDF5_DTYPE_EDGE, 
+                                                      chunks=(1,), maxshape=(None,))
+                var_id = grp_cur_obj.create_dataset(self.HDF5_NAME_ID, (0,), 
+                                                    self.HDF5_DTYPE_ID, 
+                                                    chunks=(1,), maxshape=(None,))
+                   
     def serialize_annotation(self, channel_name, region_name, annotation):
         if self._hdf5_create and self._hdf5_include_annotation:
             channel = self[self._iCurrentT][channel_name]
@@ -757,7 +773,8 @@ class TimeHolder(OrderedDict):
                                   ('description', '|S512')])
                 var = self._grp_def.create_dataset(var_name, (1,), dt,
                                                    chunks=(1,),
-                                                   compression=self._hdf5_compression)
+                                                   compression=self._hdf5_compression,
+                                                   maxshape=(None,))
                 offset = 0
             else:
                 var = self._grp_def[var_name]
@@ -770,7 +787,6 @@ class TimeHolder(OrderedDict):
             
             # TODO: fisish this by implementing a annotation object which is generated by
             # the browser and can be reused here...
-
 
     def serialize_classification(self, channel_name, region_name, predictor):
         if self._hdf5_create and self._hdf5_include_classification:
@@ -805,7 +821,8 @@ class TimeHolder(OrderedDict):
                                       ('description', '|S512')])
                     var = self._grp_def.create_dataset(var_name, (1,), dt,
                                                        chunks=(1,),
-                                                       compression=self._hdf5_compression)
+                                                       compression=self._hdf5_compression,
+                                                       maxshape=(None,))
                     offset = 0
                 else:
                     var = self._grp_def[var_name]
@@ -846,8 +863,10 @@ class TimeHolder(OrderedDict):
                 var_class_probs = \
                     grp_cur.create_dataset(var_name, (nr_objects, nr_classes),
                                            'float',
-                                           chunks=(1, nr_classes),
-                                           compression=self._hdf5_compression)
+                                           chunks=(nr_objects, nr_classes),
+                                           compression=self._hdf5_compression,
+                                           maxshape=(None, nr_classes)
+                                           )
                 offset = 0
             else:
                 var_class_probs = grp_cur[var_name]
@@ -858,8 +877,9 @@ class TimeHolder(OrderedDict):
                 dt = numpy.dtype([('classication_idx', 'int32')])
                 var_class = \
                     grp_cur.create_dataset(var_name, (nr_objects, ), dt,
-                                           chunks=(1,),
-                                           compression=self._hdf5_compression)
+                                           chunks=(nr_objects,),
+                                           compression=self._hdf5_compression,
+                                           maxshape=(None,))
             else:
                 var_class = grp_cur[var_name]
                 var_class.resize((offset+nr_objects,))
@@ -1062,6 +1082,9 @@ class CellAnalyzer(PropertyManager):
         # sort by Channel `RANK`
         channels = sorted(self._channel_registry.values())
         primary_channel = None
+        
+        
+        
         for channel in channels:
 
             self.time_holder.prepare_raw_image(channel)
@@ -1078,11 +1101,11 @@ class CellAnalyzer(PropertyManager):
         if apply:
             for channel in channels:
                 self.time_holder.apply_channel(channel)
-
+                
     def purge(self, features=None):
         for oChannel in self._channel_registry.values():
-            if not features is None and oChannel.strChannelId in features:
-                channelFeatures = features[oChannel.strChannelId]
+            if not features is None and oChannel.NAME in features:
+                channelFeatures = features[oChannel.NAME]
             else:
                 channelFeatures = None
             oChannel.purge(features=channelFeatures)
@@ -1127,7 +1150,10 @@ class CellAnalyzer(PropertyManager):
                     oChannel = self._channel_registry[channel_name]
                     if 'raw' in dctChannelInfo:
                         strHexColor, fAlpha = dctChannelInfo['raw']
-                        lstImages.append((oChannel.meta_image.image, strHexColor, fAlpha))
+                        imgRaw = oChannel.meta_image.image
+                        imgCon = ccore.Image(imgRaw.width, imgRaw.height)
+                        imgCon.init(0)
+                        lstImages.append((imgCon, strHexColor, 1.0))
 
                     if 'contours' in dctChannelInfo:
                         # transform the old dict-style to the new tuple-style,
@@ -1164,7 +1190,7 @@ class CellAnalyzer(PropertyManager):
                                     imgCon2 = ccore.Image(imgRaw.width, imgRaw.height)
                                     for iLabel, lstObjIds in dctLabels.iteritems():
                                         imgCon = ccore.Image(imgRaw.width, imgRaw.height)
-                                        oContainer.drawContoursByIds(lstObjIds, 255, imgCon, bThickContours, False)
+                                        oContainer.drawContoursByIds(lstObjIds, 255, imgCon, bThickContours, True)
                                         lstImages.append((imgCon, dctColors[iLabel], fAlpha))
 
                                         if type(bShowLabels) == types.BooleanType and bShowLabels:
